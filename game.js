@@ -102,6 +102,68 @@ function addMesh(parent, geo, material, x = 0, y = 0, z = 0, castShadow = true) 
   return m;
 }
 
+// ============================================================ ЛОФТ-ГЕОМЕТРИЯ
+// Гладкое «тело» вдоль сплайна: эллиптические сечения с разной шириной/глубиной.
+// Сплайн должен идти преимущественно в +Z (тогда «верх» сечения — мировой верх).
+// stations: [{t, rx, ryT, ryB}] — полуширина, полувысота вверх и вниз от хребта.
+function makeLoft(spinePts, stations, opts = {}) {
+  const rad = opts.radialSegments || 16;
+  const rings = opts.rings || 48;
+  const curve = new THREE.CatmullRomCurve3(spinePts);
+  const stationAt = (t) => {
+    let a = stations[0], b = stations[stations.length - 1];
+    for (let i = 0; i < stations.length - 1; i++) {
+      if (t >= stations[i].t && t <= stations[i + 1].t) { a = stations[i]; b = stations[i + 1]; break; }
+    }
+    const k = b.t === a.t ? 0 : (t - a.t) / (b.t - a.t);
+    const s = k * k * (3 - 2 * k); // smoothstep
+    const L = (x, y) => x + (y - x) * s;
+    return { rx: L(a.rx, b.rx), ryT: L(a.ryT, b.ryT), ryB: L(a.ryB, b.ryB) };
+  };
+  const pos = [], col = [], idx = [];
+  const cUp = new THREE.Color(opts.colorUp ?? C.coatDark);
+  const cMid = new THREE.Color(opts.colorMid ?? C.coat);
+  const cDn = new THREE.Color(opts.colorDown ?? C.coatLight);
+  const S = new THREE.Vector3(1, 0, 0); // боковая ось (кривая лежит в плоскости x=0)
+  const tmp = new THREE.Color();
+  for (let i = 0; i <= rings; i++) {
+    const t = i / rings;
+    const P = curve.getPointAt(t);
+    const T = curve.getTangentAt(t);
+    const U = new THREE.Vector3(0, T.z, -T.y).normalize(); // «верх» сечения
+    const st = stationAt(t);
+    for (let j = 0; j <= rad; j++) {
+      const th = (j / rad) * Math.PI * 2;
+      const cs = Math.cos(th), sn = Math.sin(th);
+      const ry = sn > 0 ? st.ryT : st.ryB;
+      pos.push(
+        P.x + S.x * st.rx * cs + U.x * ry * sn,
+        P.y + S.y * st.rx * cs + U.y * ry * sn,
+        P.z + S.z * st.rx * cs + U.z * ry * sn
+      );
+      // окрас: спина темнее, брюхо светлее
+      if (sn > 0) tmp.lerpColors(cMid, cUp, sn * (opts.upStrength ?? 0.55));
+      else tmp.lerpColors(cMid, cDn, -sn * (opts.downStrength ?? 0.7));
+      col.push(tmp.r, tmp.g, tmp.b);
+    }
+  }
+  for (let i = 0; i < rings; i++) {
+    for (let j = 0; j < rad; j++) {
+      const a = i * (rad + 1) + j, b = a + rad + 1;
+      idx.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.castShadow = true;
+  return mesh;
+}
+
 // ============================================================ ТАЗЫ — МОДЕЛЬ СОБАКИ
 // Пропорции настоящей тазы: глубокая грудь, резко подтянутый живот,
 // длинные сухие ноги, длинная узкая голова, висячие уши с очёсами,
@@ -111,49 +173,77 @@ function createTazy() {
   const body = new THREE.Group();      // качается при галопе
   root.add(body);
 
-  // ---------- ТУЛОВИЩЕ: вытянутое, обтекаемое, линия спины ровная
-  // Грудная клетка: глубокая, но вытянутая вдоль корпуса
-  const chest = addMesh(body, new THREE.SphereGeometry(1, 24, 18), M.coat, 0, 1.04, -0.3);
-  chest.scale.set(0.22, 0.34, 0.58);
-  chest.rotation.x = 0.12;
-  // Светлая грудь спереди-снизу (умеренно)
-  const brisket = addMesh(body, new THREE.SphereGeometry(1, 18, 14), M.coatLight, 0, 0.93, -0.5);
-  brisket.scale.set(0.15, 0.24, 0.3);
-  // Поясница/живот: сильно подтянут
-  const loin = addMesh(body, new THREE.SphereGeometry(1, 20, 14), M.coat, 0, 1.14, 0.2);
-  loin.scale.set(0.165, 0.21, 0.42);
-  // Круп: слегка скошен
-  const croup = addMesh(body, new THREE.SphereGeometry(1, 20, 14), M.coat, 0, 1.1, 0.54);
-  croup.scale.set(0.19, 0.24, 0.32);
-  croup.rotation.x = -0.2;
+  // ---------- ТУЛОВИЩЕ: единый гладкий лофт от плеч до основания хвоста
+  // глубокая грудь → резкий подрыв (талия) → мускулистый круп
+  const torso = makeLoft(
+    [
+      new THREE.Vector3(0, 1.28, -0.66),
+      new THREE.Vector3(0, 1.32, -0.38),
+      new THREE.Vector3(0, 1.31, -0.05),
+      new THREE.Vector3(0, 1.28, 0.28),
+      new THREE.Vector3(0, 1.2, 0.58),
+      new THREE.Vector3(0, 1.05, 0.8),
+    ],
+    [
+      { t: 0.0, rx: 0.09, ryT: 0.09, ryB: 0.13 },
+      { t: 0.16, rx: 0.145, ryT: 0.15, ryB: 0.3 },  // грудная клетка, самая глубокая точка
+      { t: 0.34, rx: 0.135, ryT: 0.14, ryB: 0.26 },
+      { t: 0.56, rx: 0.1, ryT: 0.13, ryB: 0.12 },   // подрыв — фирменная «талия» борзой
+      { t: 0.78, rx: 0.125, ryT: 0.14, ryB: 0.15 }, // круп
+      { t: 1.0, rx: 0.04, ryT: 0.05, ryB: 0.05 },
+    ]
+  );
+  body.add(torso);
 
-  // ---------- ШЕЯ: длинная, сухая, с изгибом
+  // ---------- ШЕЯ: длинный сухой лофт, овал глубже спереди-сзади
   const neck = new THREE.Group();
-  neck.position.set(0, 1.16, -0.6);
+  neck.position.set(0, 1.18, -0.58);
   neck.rotation.x = -0.6; // наклон вперёд-вверх (к морде)
   body.add(neck);
-  const neckM = addMesh(neck, new THREE.CylinderGeometry(0.08, 0.125, 0.6, 14), M.coat, 0, 0.27, 0);
-  neckM.scale.set(1, 1, 1.35);
+  const neckLoft = makeLoft(
+    [
+      new THREE.Vector3(0, -0.08, 0.03),
+      new THREE.Vector3(0, 0.22, 0.02),
+      new THREE.Vector3(0, 0.46, 0),
+      new THREE.Vector3(0, 0.62, -0.01),
+    ],
+    [
+      { t: 0.0, rx: 0.1, ryT: 0.14, ryB: 0.17 },
+      { t: 0.5, rx: 0.072, ryT: 0.1, ryB: 0.11 },
+      { t: 1.0, rx: 0.06, ryT: 0.08, ryB: 0.085 },
+    ],
+    { rings: 24, upStrength: 0.2, downStrength: 0.4 }
+  );
+  neck.add(neckLoft);
 
-  // ---------- ГОЛОВА: длинная, узкая, клинообразная, некрупная
+  // ---------- ГОЛОВА: клинообразный лофт от мочки носа к черепу
   const head = new THREE.Group();
   head.position.set(0, 0.58, 0.02);
   head.rotation.x = 0.45; // компенсация наклона шеи: морда вперёд, чуть вниз
   neck.add(head);
-  const skull = addMesh(head, new THREE.SphereGeometry(1, 20, 16), M.coat, 0, 0.02, 0.02);
-  skull.scale.set(0.09, 0.1, 0.16);
-  // Длинная сужающаяся морда
-  const muzzle = addMesh(head, new THREE.CylinderGeometry(0.032, 0.072, 0.3, 12), M.coat, 0, -0.03, -0.24);
-  muzzle.rotation.x = Math.PI / 2 - 0.1;
-  muzzle.scale.set(1, 1, 0.8);
+  const headLoft = makeLoft(
+    [
+      new THREE.Vector3(0, -0.035, -0.43), // мочка
+      new THREE.Vector3(0, -0.02, -0.3),
+      new THREE.Vector3(0, 0.005, -0.16),  // переход (stop)
+      new THREE.Vector3(0, 0.025, -0.02),
+      new THREE.Vector3(0, 0.02, 0.14),    // затылок
+    ],
+    [
+      { t: 0.0, rx: 0.026, ryT: 0.024, ryB: 0.026 },
+      { t: 0.3, rx: 0.04, ryT: 0.038, ryB: 0.045 },
+      { t: 0.55, rx: 0.065, ryT: 0.06, ryB: 0.065 },
+      { t: 0.8, rx: 0.085, ryT: 0.085, ryB: 0.09 },
+      { t: 1.0, rx: 0.07, ryT: 0.07, ryB: 0.08 },
+    ],
+    { rings: 28, upStrength: 0.35, downStrength: 0.55 }
+  );
+  head.add(headLoft);
   // Мочка носа
-  addMesh(head, new THREE.SphereGeometry(0.03, 10, 8), M.nose, 0, -0.012, -0.39);
-  // Нижняя челюсть
-  const jaw = addMesh(head, new THREE.CylinderGeometry(0.022, 0.04, 0.2, 8), M.coatLight, 0, -0.068, -0.19);
-  jaw.rotation.x = Math.PI / 2 - 0.05;
+  addMesh(head, new THREE.SphereGeometry(0.028, 10, 8), M.nose, 0, -0.033, -0.43);
   // Глаза: тёмные, миндалевидные, по бокам узкой головы
   for (const s of [-1, 1]) {
-    const eye = addMesh(head, new THREE.SphereGeometry(0.024, 10, 8), M.eye, s * 0.062, 0.035, -0.1, false);
+    const eye = addMesh(head, new THREE.SphereGeometry(0.022, 10, 8), M.eye, s * 0.055, 0.032, -0.11, false);
     eye.scale.set(0.8, 1, 1.2);
   }
   // Уши: висячие, мягкие, с очёсами — фирменная черта тазы
@@ -163,10 +253,10 @@ function createTazy() {
     ear.position.set(s * 0.085, 0.07, 0.05);
     ear.rotation.z = s * 0.38;
     head.add(ear);
-    const flap = addMesh(ear, new THREE.SphereGeometry(1, 12, 10), M.coatDark, 0, -0.12, 0);
-    flap.scale.set(0.03, 0.14, 0.07);
+    const flap = addMesh(ear, new THREE.SphereGeometry(1, 12, 10), M.coatDark, 0, -0.13, 0);
+    flap.scale.set(0.034, 0.16, 0.085);
     // очёс на конце уха
-    const fringe = addMesh(ear, new THREE.ConeGeometry(0.038, 0.09, 8), M.coatDark, 0, -0.27, 0);
+    const fringe = addMesh(ear, new THREE.ConeGeometry(0.042, 0.1, 8), M.coatDark, 0, -0.3, 0);
     fringe.rotation.x = Math.PI;
     ears.push(ear);
   }
@@ -174,7 +264,7 @@ function createTazy() {
   // ---------- ХВОСТ: длинный, тонкий, серпом вверх на конце
   const tailSegs = [];
   let tailParent = body;
-  let tp = new THREE.Vector3(0, 1.12, 0.76);
+  let tp = new THREE.Vector3(0, 1.06, 0.78);
   const tailCurve = [-0.9, -0.4, -0.3, -0.4, -0.4]; // вниз-назад, кончик серпом вверх
   for (let i = 0; i < 5; i++) {
     const seg = new THREE.Group();
@@ -223,8 +313,11 @@ function createTazy() {
     { l: legRR, ph: 0.62, front: false },
   ];
   function animate(t, speedNorm, state) {
-    const freq = 5.5 + speedNorm * 3.5;
+    // частота шага привязана к скорости мира — визуально бег «цепляется» за землю
+    const freq = 6.5 + speedNorm * 5;
     const T = t * freq;
+    // корпус наклонён вперёд тем сильнее, чем выше скорость
+    root.rotation.x = -0.03 - speedNorm * 0.05;
     if (state === 'run') {
       const amp = 0.85;
       for (const { l, ph, front } of legs) {
@@ -476,6 +569,41 @@ const eagle = new THREE.Group();
   scene.add(eagle);
 }
 
+// ---- Пыль из-под лап: даёт ощущение скорости у самой собаки
+const dustPool = [];
+{
+  const dustMat = new THREE.MeshBasicMaterial({ color: 0x9c8a55, transparent: true, opacity: 0.35, depthWrite: false });
+  for (let i = 0; i < 24; i++) {
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), dustMat.clone());
+    p.scale.set(1.4, 0.6, 1.4); // приплюснутые клубы
+    p.visible = false;
+    p.userData.life = 0;
+    scene.add(p);
+    dustPool.push(p);
+  }
+}
+let dustTimer = 0;
+function spawnDust(x, z) {
+  const p = dustPool.find(d => !d.visible);
+  if (!p) return;
+  p.visible = true;
+  p.userData.life = 1;
+  p.position.set(x + (Math.random() - 0.5) * 0.7, 0.04, z + 0.4 + Math.random() * 0.5);
+  const s = 0.35 + Math.random() * 0.45;
+  p.scale.set(s * 1.4, s * 0.6, s * 1.4);
+}
+function updateDust(dt, dz) {
+  for (const p of dustPool) {
+    if (!p.visible) continue;
+    p.userData.life -= dt * 2.8;
+    if (p.userData.life <= 0) { p.visible = false; continue; }
+    p.position.z += dz;            // пыль уносится назад вместе с миром
+    p.position.y += dt * 0.5;
+    p.scale.multiplyScalar(1 + dt * 3.2);
+    p.material.opacity = 0.35 * p.userData.life * p.userData.life;
+  }
+}
+
 // ============================================================ ИГРОВОЕ СОСТОЯНИЕ
 const tazy = createTazy();
 tazy.root.position.set(0, 0, 0);
@@ -700,6 +828,13 @@ function loop(now) {
     tazy.root.position.set(game.laneX, game.y, 0);
     tazy.root.rotation.z = (LANE_X[game.lane] - game.laneX) * -0.12;
     tazy.animate(game.t, (game.speed - START_SPEED) / (MAX_SPEED - START_SPEED), game.state);
+
+    // --- пыль из-под лап
+    if (game.state !== 'jump') {
+      dustTimer -= dt;
+      if (dustTimer <= 0) { dustTimer = 0.05; spawnDust(game.laneX, 0); }
+    }
+    updateDust(dt, game.speed * dt);
 
     // --- прокрутка мира
     groundTex.offset.y -= dz * 0.0102;
