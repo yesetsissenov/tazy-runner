@@ -628,6 +628,47 @@ const obstacles = []; // {group, kind, lane}
 const decors = [];
 const coins = [];
 
+// ---- Скальные стены каньона (Чарын): «коридор» по бокам трассы,
+// главный источник ощущения скорости — как стены/поезда в Subway Surfers
+const rockMats = [
+  mat(0xb5764a, { flatShading: true, roughness: 0.95 }),
+  mat(0xa3663f, { flatShading: true, roughness: 0.95 }),
+  mat(0xc48857, { flatShading: true, roughness: 0.95 }),
+  mat(0x8f5636, { flatShading: true, roughness: 0.95 }),
+];
+function makeCliff() {
+  const g = new THREE.Group();
+  const h = 2.2 + Math.random() * 2.8;
+  let y = 0;
+  // слоистые глыбы друг на друге, каждый слой чуть уже — силуэт каньона
+  const layers = 2 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < layers; i++) {
+    const lh = h / layers * (0.8 + Math.random() * 0.5);
+    const w = (2.6 - i * 0.45) * (0.85 + Math.random() * 0.3);
+    const d = 3.2 + Math.random() * 1.5;
+    const rock = addMesh(g, new THREE.DodecahedronGeometry(1, 0), rockMats[(Math.random() * rockMats.length) | 0], (Math.random() - 0.5) * 0.4, y + lh / 2, (Math.random() - 0.5) * 0.6);
+    rock.scale.set(w / 2, lh / 2 * 1.4, d / 2);
+    rock.rotation.y = Math.random() * Math.PI;
+    y += lh * 0.72;
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+// иногда вместо скалы — пирамидальный тополь
+function makePoplar() {
+  const g = new THREE.Group();
+  addMesh(g, new THREE.CylinderGeometry(0.09, 0.13, 1.1, 7), M.wood, 0, 0.55, 0);
+  const crown = addMesh(g, new THREE.ConeGeometry(0.75, 3.6, 8), mat(0x5e7a38, { flatShading: true }), 0, 2.6, 0);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+function spawnWall(side, z = SPAWN_Z - Math.random() * 4) {
+  const obj = Math.random() < 0.82 ? makeCliff() : makePoplar();
+  obj.position.set(side * (6.3 + Math.random() * 1.4), 0, z);
+  scene.add(obj);
+  decors.push(obj);
+}
+
 // Мелочь у самой тропы: кочки/камешки для ближнего параллакса
 function spawnTrackside() {
   const side = Math.random() < 0.5 ? -1 : 1;
@@ -794,6 +835,11 @@ function startGame() {
     distSinceObstacle: -20, distSinceDecor: 0, distSinceAsyk: -10,
   });
   for (let i = 0; i < 10; i++) { spawnDecor(); decors[decors.length - 1].position.z = -10 - i * 10; }
+  // коридор из скал уже стоит с первого кадра
+  for (let z = -6; z > SPAWN_Z; z -= 4.5) {
+    spawnWall(-1, z - Math.random() * 2);
+    spawnWall(1, z - Math.random() * 2);
+  }
   startOverlay.classList.add('hidden');
   gameoverOverlay.classList.add('hidden');
   ac().resume?.();
@@ -872,6 +918,11 @@ function loop(now) {
     if (game.distSinceDecor > 9) { game.distSinceDecor = 0; spawnDecor(); }
     game.distSinceTrackside = (game.distSinceTrackside || 0) + dz;
     if (game.distSinceTrackside > 3.5) { game.distSinceTrackside = 0; spawnTrackside(); }
+    // стены коридора — каждая сторона своим шагом
+    game.distSinceWallL = (game.distSinceWallL || 0) + dz;
+    game.distSinceWallR = (game.distSinceWallR || 0) + dz;
+    if (game.distSinceWallL > 4.5) { game.distSinceWallL = Math.random() * 1.5; spawnWall(-1); }
+    if (game.distSinceWallR > 4.5) { game.distSinceWallR = Math.random() * 1.5; spawnWall(1); }
     if (game.distSinceAsyk > 26) { game.distSinceAsyk = 0; spawnAsykLine(); }
 
     // --- коллизии
