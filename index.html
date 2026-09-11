@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Тазы Runner — қазақ даласындағы жүгіріс</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2218%22 fill=%22%237a1f1f%22/><text x=%2250%22 y=%2272%22 font-size=%2260%22 text-anchor=%22middle%22>🐕</text></svg>">
+<style>
+  :root {
+    --gold: #d4a017;
+    --gold-light: #f0c75e;
+    --ochre: #b0722a;
+    --dark-red: #7a1f1f;
+    --felt: #f5e9d0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1208; font-family: 'Segoe UI', Tahoma, sans-serif; }
+  #game-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  /* ---- Kazakh ornament border (qoshqar-muiz inspired, inline SVG) ---- */
+  .ornament-band {
+    position: absolute; left: 0; width: 100%; height: 26px; z-index: 5; pointer-events: none;
+    background-repeat: repeat-x; background-size: auto 100%; opacity: 0.92;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="52" height="26" viewBox="0 0 52 26"><rect width="52" height="26" fill="%237a1f1f"/><path d="M26 4 C18 4 14 9 14 13 C14 17 17 19 20 19 C22 19 23 17.5 23 16 C23 14.8 22.2 14 21 14 C20.2 14 19.6 14.6 19.6 15.4 C19.6 16 20 16.4 20.6 16.4 C20.4 17 19.6 17.4 18.8 17 C17.6 16.4 17 15.2 17 13.8 C17 10.6 20.6 7 26 7 C31.4 7 35 10.6 35 13.8 C35 15.2 34.4 16.4 33.2 17 C32.4 17.4 31.6 17 31.4 16.4 C32 16.4 32.4 16 32.4 15.4 C32.4 14.6 31.8 14 31 14 C29.8 14 29 14.8 29 16 C29 17.5 30 19 32 19 C35 19 38 17 38 13 C38 9 34 4 26 4 Z" fill="%23d4a017"/><rect y="0" width="52" height="2" fill="%23d4a017"/><rect y="24" width="52" height="2" fill="%23d4a017"/></svg>');
+  }
+  #band-top { top: 0; }
+  #band-bottom { bottom: 0; transform: scaleY(-1); }
+
+  /* ---- HUD ---- */
+  #hud {
+    position: absolute; top: 34px; left: 0; width: 100%; z-index: 6;
+    display: flex; justify-content: space-between; padding: 0 22px; pointer-events: none;
+  }
+  .hud-box {
+    background: linear-gradient(180deg, rgba(122,31,31,.88), rgba(90,20,20,.88));
+    border: 2px solid var(--gold); border-radius: 10px; padding: 6px 16px;
+    color: var(--felt); text-shadow: 0 1px 2px #000;
+    box-shadow: 0 3px 10px rgba(0,0,0,.5);
+  }
+  .hud-label { font-size: 11px; letter-spacing: 2px; color: var(--gold-light); text-transform: uppercase; }
+  .hud-value { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  #asyk-count::before { content: '🦴 '; font-size: 18px; }
+
+  /* ---- Overlays ---- */
+  .overlay {
+    position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: radial-gradient(ellipse at center, rgba(26,18,8,.55) 0%, rgba(26,18,8,.85) 100%);
+    transition: opacity .4s;
+  }
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+  .panel {
+    background: linear-gradient(180deg, #7a1f1f, #5a1414);
+    border: 3px solid var(--gold); border-radius: 18px; padding: 34px 46px;
+    box-shadow: 0 0 60px rgba(212,160,23,.25), inset 0 0 40px rgba(0,0,0,.35);
+    max-width: 92vw;
+  }
+  .panel h1 {
+    color: var(--gold-light); font-size: clamp(30px, 6vw, 54px); letter-spacing: 4px;
+    text-shadow: 0 2px 0 #7a4a00, 0 4px 12px #000; margin-bottom: 6px;
+  }
+  .panel h2 { color: var(--felt); font-size: clamp(14px, 2.5vw, 20px); font-weight: 400; margin-bottom: 18px; }
+  .panel .orn-divider { color: var(--gold); font-size: 20px; letter-spacing: 6px; margin: 10px 0 18px; }
+  .panel p { color: var(--felt); font-size: 15px; line-height: 1.7; margin-bottom: 20px; }
+  .panel .keys { color: var(--gold-light); }
+  .btn {
+    display: inline-block; cursor: pointer; pointer-events: auto;
+    background: linear-gradient(180deg, var(--gold-light), var(--gold));
+    color: #4a1010; font-size: 20px; font-weight: 700; letter-spacing: 2px;
+    border: none; border-radius: 12px; padding: 14px 44px;
+    box-shadow: 0 4px 0 #8a6510, 0 8px 20px rgba(0,0,0,.5);
+    transition: transform .1s;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #8a6510; }
+  #final-stats { font-size: 22px; color: var(--gold-light); margin-bottom: 8px; }
+  #best-line { font-size: 14px; color: var(--felt); opacity: .85; margin-bottom: 20px; }
+
+  #mute-btn {
+    position: absolute; bottom: 36px; right: 18px; z-index: 7; cursor: pointer;
+    background: rgba(122,31,31,.85); border: 2px solid var(--gold); border-radius: 50%;
+    width: 44px; height: 44px; font-size: 20px; color: var(--felt);
+  }
+  @media (max-width: 600px) {
+    .hud-value { font-size: 20px; }
+    .panel { padding: 24px 20px; }
+  }
+</style>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+  <div id="band-top" class="ornament-band"></div>
+  <div id="band-bottom" class="ornament-band"></div>
+
+  <div id="hud">
+    <div class="hud-box"><div class="hud-label">Ұпай · Score</div><div class="hud-value" id="score">0</div></div>
+    <div class="hud-box"><div class="hud-label">Асық</div><div class="hud-value" id="asyk-count">0</div></div>
+  </div>
+
+  <div id="start-overlay" class="overlay">
+    <div class="panel">
+      <h1>ТАЗЫ RUNNER</h1>
+      <h2>Қазақ даласындағы шексіз жүгіріс</h2>
+      <div class="orn-divider">❁ ⵛ ❁ ⵛ ❁</div>
+      <p>
+        Веди тазы — легендарную казахскую борзую — через бескрайнюю степь.<br>
+        <span class="keys">← →</span> / свайп — смена полосы&nbsp;&nbsp;
+        <span class="keys">↑</span> / свайп вверх — прыжок&nbsp;&nbsp;
+        <span class="keys">↓</span> / свайп вниз — подкат<br>
+        Собирай асыки, уворачивайся от юрт, верблюдов и повозок!
+      </p>
+      <button class="btn" id="start-btn">БАСТАУ ▶</button>
+    </div>
+  </div>
+
+  <div id="gameover-overlay" class="overlay hidden">
+    <div class="panel">
+      <h1>ОЙЫН БІТТІ</h1>
+      <div class="orn-divider">❁ ⵛ ❁ ⵛ ❁</div>
+      <div id="final-stats"></div>
+      <div id="best-line"></div>
+      <button class="btn" id="restart-btn">ҚАЙТА ОЙНАУ ↻</button>
+    </div>
+  </div>
+
+  <button id="mute-btn" title="Дыбыс">🔊</button>
+
+  <script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  </script>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
