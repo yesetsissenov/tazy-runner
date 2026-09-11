@@ -312,10 +312,12 @@ function createTazy() {
     { l: legRL, ph: 0.5, front: false },
     { l: legRR, ph: 0.62, front: false },
   ];
-  function animate(t, speedNorm, state) {
-    // частота шага привязана к скорости мира — визуально бег «цепляется» за землю
-    const freq = 6.5 + speedNorm * 5;
-    const T = t * freq;
+  function animate(t, speed, state) {
+    // мах галопа ≈ 2.6 юнита: частота шага = скорость мира / длину маха,
+    // тогда лапы визуально «цепляются» за землю, а не скользят по ней
+    const STRIDE = 2.6;
+    const T = t * (speed / STRIDE) * Math.PI * 2;
+    const speedNorm = Math.min(1, Math.max(0, (speed - START_SPEED) / (MAX_SPEED - START_SPEED)));
     // корпус наклонён вперёд тем сильнее, чем выше скорость
     root.rotation.x = -0.03 - speedNorm * 0.05;
     if (state === 'run') {
@@ -330,14 +332,14 @@ function createTazy() {
       // корпус: вертикальный ход + продольная качка
       body.position.y = Math.abs(Math.sin(T)) * 0.09 - 0.02;
       body.rotation.x = Math.sin(T) * 0.085;
-      // хвост струится
+      // хвост струится (волна медленнее шага, иначе дребезжит)
       for (let i = 0; i < tailSegs.length; i++) {
-        tailSegs[i].rotation.x = tailCurve[i] + Math.sin(T * 0.9 - i * 0.7) * 0.12;
-        tailSegs[i].rotation.z = Math.sin(T * 0.45 - i * 0.5) * 0.07;
+        tailSegs[i].rotation.x = tailCurve[i] + Math.sin(T * 0.5 - i * 0.7) * 0.1;
+        tailSegs[i].rotation.z = Math.sin(T * 0.25 - i * 0.5) * 0.06;
       }
       // уши летят по ветру (отброшены назад)
       for (let i = 0; i < ears.length; i++) {
-        ears[i].rotation.x = -0.35 + Math.sin(T * 1.1 + i) * 0.14;
+        ears[i].rotation.x = -0.35 + Math.sin(T * 0.5 + i) * 0.12;
       }
     } else if (state === 'jump') {
       // ноги поджаты в полёте
@@ -626,6 +628,24 @@ const obstacles = []; // {group, kind, lane}
 const decors = [];
 const coins = [];
 
+// Мелочь у самой тропы: кочки/камешки для ближнего параллакса
+function spawnTrackside() {
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const small = Math.random() < 0.6;
+  const obj = new THREE.Group();
+  if (small) {
+    const tuft = addMesh(obj, new THREE.SphereGeometry(0.14 + Math.random() * 0.12, 7, 5),
+      mat(0x8f8a4e, { flatShading: true }), 0, 0.08, 0);
+    tuft.scale.y = 0.6;
+  } else {
+    addMesh(obj, new THREE.DodecahedronGeometry(0.16 + Math.random() * 0.14, 0), M.stone, 0, 0.1, 0);
+  }
+  obj.position.set(side * (3.4 + Math.random() * 1.8), 0, SPAWN_Z - Math.random() * 8);
+  obj.rotation.y = Math.random() * Math.PI * 2;
+  scene.add(obj);
+  decors.push(obj);
+}
+
 function spawnDecor() {
   const side = Math.random() < 0.5 ? -1 : 1;
   const kind = Math.random();
@@ -827,17 +847,18 @@ function loop(now) {
     }
     tazy.root.position.set(game.laneX, game.y, 0);
     tazy.root.rotation.z = (LANE_X[game.lane] - game.laneX) * -0.12;
-    tazy.animate(game.t, (game.speed - START_SPEED) / (MAX_SPEED - START_SPEED), game.state);
+    tazy.animate(game.t, game.speed, game.state);
 
     // --- пыль из-под лап
     if (game.state !== 'jump') {
       dustTimer -= dt;
-      if (dustTimer <= 0) { dustTimer = 0.05; spawnDust(game.laneX, 0); }
+      if (dustTimer <= 0) { dustTimer = 0.9 / game.speed; spawnDust(game.laneX, 0); }
     }
     updateDust(dt, game.speed * dt);
 
     // --- прокрутка мира
-    groundTex.offset.y -= dz * 0.0102;
+    // тайл текстуры = 260/24 ≈ 10.83 юнита → сдвиг offset на юнит = 24/260
+    groundTex.offset.y -= dz * (24 / 260);
     for (const o of obstacles) o.group.position.z += dz;
     for (const d of decors) d.position.z += dz;
     for (const c of coins) { c.position.z += dz; c.rotation.y += dt * 5; }
@@ -849,6 +870,8 @@ function loop(now) {
     const gap = Math.max(15, 30 - game.speed * 0.45);
     if (game.distSinceObstacle > gap) { game.distSinceObstacle = 0; spawnObstaclePattern(); }
     if (game.distSinceDecor > 9) { game.distSinceDecor = 0; spawnDecor(); }
+    game.distSinceTrackside = (game.distSinceTrackside || 0) + dz;
+    if (game.distSinceTrackside > 3.5) { game.distSinceTrackside = 0; spawnTrackside(); }
     if (game.distSinceAsyk > 26) { game.distSinceAsyk = 0; spawnAsykLine(); }
 
     // --- коллизии
@@ -880,6 +903,10 @@ function loop(now) {
     camera.position.x += (game.laneX * 0.45 - camera.position.x) * dt * 4;
     camera.position.y = 3.4 + Math.sin(game.t * 2.2) * 0.03;
     camera.position.z = 7.2;
+    // FOV раскрывается со скоростью — усиливает ощущение разгона
+    const targetFov = 58 + ((game.speed - START_SPEED) / (MAX_SPEED - START_SPEED)) * 10;
+    camera.fov += (targetFov - camera.fov) * dt * 2;
+    camera.updateProjectionMatrix();
     camera.lookAt(game.laneX * 0.6, 1.1, -6);
 
     backgroundPluck(t);
@@ -888,7 +915,7 @@ function loop(now) {
     asykEl.textContent = game.asyks;
   } else {
     // на заставке собака трусит на месте
-    tazy.animate(t, 0.25, 'run');
+    tazy.animate(t, 7, 'run');
     if (DEBUG_DOG) {
       // ?debug=dog — осмотр модели по кругу
       camera.position.set(3.4, 1.15, -0.1); // строго сбоку
