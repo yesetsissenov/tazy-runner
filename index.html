@@ -81,6 +81,49 @@
     background: rgba(122,31,31,.85); border: 2px solid var(--gold); border-radius: 50%;
     width: 44px; height: 44px; font-size: 20px; color: var(--felt);
   }
+
+  /* ---- Отсчёт старта ---- */
+  #countdown {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    z-index: 8; pointer-events: none; color: var(--gold-light);
+    font-size: clamp(70px, 16vw, 150px); font-weight: 800;
+    text-shadow: 0 3px 0 #7a4a00, 0 8px 30px rgba(0,0,0,.6);
+  }
+  #countdown.hidden { display: none; }
+  #countdown.pop { animation: cd-pop .55s ease-out; }
+  @keyframes cd-pop {
+    0% { transform: scale(1.7); opacity: 0; }
+    30% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(.92); opacity: .9; }
+  }
+
+  /* ---- Вспышка при столкновении ---- */
+  #flash {
+    position: absolute; inset: 0; z-index: 9; pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(200,30,20,0) 30%, rgba(160,20,15,.55) 100%);
+    opacity: 0;
+  }
+  #flash.go { animation: flash-anim .6s ease-out; }
+  @keyframes flash-anim { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+  /* ---- Всплывающие +15 ---- */
+  #popups { position: absolute; inset: 0; z-index: 7; pointer-events: none; }
+  .popup {
+    position: absolute; top: 58%; transform: translateX(-50%);
+    color: var(--gold-light); font-size: 26px; font-weight: 800;
+    text-shadow: 0 2px 4px rgba(0,0,0,.7);
+    animation: popup-rise .8s ease-out forwards;
+  }
+  @keyframes popup-rise {
+    0% { opacity: 0; margin-top: 0; transform: translateX(-50%) scale(.6); }
+    20% { opacity: 1; transform: translateX(-50%) scale(1.15); }
+    100% { opacity: 0; margin-top: -90px; transform: translateX(-50%) scale(1); }
+  }
+
+  #asyk-count.pulse { animation: asyk-pulse .3s ease-out; }
+  @keyframes asyk-pulse { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }
+
+  #best { font-size: 11px; color: var(--gold-light); opacity: .85; margin-top: 2px; }
   @media (max-width: 600px) {
     .hud-value { font-size: 20px; }
     .panel { padding: 24px 20px; }
@@ -93,9 +136,12 @@
   <div id="band-bottom" class="ornament-band"></div>
 
   <div id="hud">
-    <div class="hud-box"><div class="hud-label">Ұпай · Score</div><div class="hud-value" id="score">0</div></div>
+    <div class="hud-box"><div class="hud-label">Ұпай · Score</div><div class="hud-value" id="score">0</div><div id="best"></div></div>
     <div class="hud-box"><div class="hud-label">Асық</div><div class="hud-value" id="asyk-count">0</div></div>
   </div>
+  <div id="countdown" class="hidden"></div>
+  <div id="flash"></div>
+  <div id="popups"></div>
 
   <div id="start-overlay" class="overlay">
     <div class="panel">
