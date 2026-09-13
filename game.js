@@ -6,28 +6,29 @@ import * as THREE from 'three';
 const LANE_X = [-2.3, 0, 2.3];
 const SPAWN_Z = -110;
 const KILL_Z = 14;
-const GRAVITY = -52;        // резкая дуга прыжка — аркадный отклик
-const JUMP_VY = 11;
-const FASTFALL_VY = -24;
-const SLIDE_TIME = 0.55;
-const LANE_TWEEN = 0.16;    // секунд на смену полосы
-const START_SPEED = 13;
-const MAX_SPEED = 30;
+const GRAVITY = -34;        // читаемая дуга: достаточно времени увидеть и перелететь плетень
+const JUMP_VY = 10.8;
+const JUMP_CUT_VY = 8;      // даже короткое нажатие уверенно переносит через плетень
+const FASTFALL_VY = -18;
+const SLIDE_TIME = 0.62;
+const LANE_TWEEN = 0.18;
+const START_SPEED = 12;
+const MAX_SPEED = 26;
 const COUNTDOWN = 2.0;      // отсчёт перед разгоном
 const DEBUG_DOG = new URLSearchParams(location.search).get('debug') === 'dog';
 
-// Палитра: золотой час в степи
+// Контрастная палитра степи
 const C = {
-  coat: 0xcf9a4d,      // основной палевый
-  coatLight: 0xecc98f, // грудь/низ
-  coatDark: 0x8a6432,  // уши, спина
-  nose: 0x1c1410,
-  mountain: 0x8a6fa8,
-  mountainSnow: 0xfef4e0,
-  felt: 0xf2e4c4,
-  ornRed: 0x8f2020,
-  gold: 0xf0b428,
-  wood: 0x7a5228,
+  coat: 0xd68b32,
+  coatLight: 0xf4c978,
+  coatDark: 0x653319,
+  nose: 0x140b08,
+  mountain: 0x52629a,
+  mountainSnow: 0xfff5dc,
+  felt: 0xffe8b9,
+  ornRed: 0xa61524,
+  gold: 0xffbd18,
+  wood: 0x653613,
 };
 
 // ============================================================ RENDERER / SCENE
@@ -37,16 +38,17 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.18;
+renderer.toneMappingExposure = 1.3;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xf2d29a, 42, 100);
+scene.fog = new THREE.Fog(0xe6a84c, 68, 145);
 
-const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 300);
+const camera = new THREE.PerspectiveCamera(56, 1, 0.1, 300);
 camera.position.set(0, 3.4, 7.2);
 camera.lookAt(0, 1.1, -4);
 // игровая позиция камеры: ниже и ближе — собака крупнее, скорость злее
-const CAM = { y: 3.05, z: 6.55, lookY: 1.0, lookZ: -6 };
+const CAM = { xOffset: 0.55, y: 2.9, z: 6.2, lookY: 1.0, lookZ: -6 };
 
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -63,10 +65,10 @@ resize();
   cv.width = 2; cv.height = 256;
   const g = cv.getContext('2d');
   const gr = g.createLinearGradient(0, 0, 0, 256);
-  gr.addColorStop(0, '#1e6fc4');
-  gr.addColorStop(0.45, '#6db8e8');
-  gr.addColorStop(0.72, '#ffd98c');
-  gr.addColorStop(1, '#ffb95e');
+  gr.addColorStop(0, '#0754b8');
+  gr.addColorStop(0.44, '#35a7e8');
+  gr.addColorStop(0.73, '#ffd15a');
+  gr.addColorStop(1, '#f18b2b');
   g.fillStyle = gr; g.fillRect(0, 0, 2, 256);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -74,8 +76,8 @@ resize();
 }
 
 // ---- Свет: тёплое низкое солнце
-scene.add(new THREE.HemisphereLight(0xbfe0ff, 0x9a7a3a, 1.0));
-const sun = new THREE.DirectionalLight(0xffe2b0, 2.3);
+scene.add(new THREE.HemisphereLight(0xc5e8ff, 0x80501d, 1.3));
+const sun = new THREE.DirectionalLight(0xffdf9a, 2.8);
 sun.position.set(14, 20, -6);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -187,22 +189,24 @@ function createTazy() {
       new THREE.Vector3(0, 1.05, 0.8),
     ],
     [
-      { t: 0.0, rx: 0.09, ryT: 0.09, ryB: 0.13 },
-      { t: 0.16, rx: 0.145, ryT: 0.15, ryB: 0.3 },
-      { t: 0.34, rx: 0.135, ryT: 0.14, ryB: 0.26 },
-      { t: 0.56, rx: 0.1, ryT: 0.13, ryB: 0.12 },
-      { t: 0.78, rx: 0.125, ryT: 0.14, ryB: 0.15 },
-      { t: 1.0, rx: 0.04, ryT: 0.05, ryB: 0.05 },
+      { t: 0.0, rx: 0.12, ryT: 0.11, ryB: 0.16 },
+      { t: 0.16, rx: 0.22, ryT: 0.18, ryB: 0.34 },
+      { t: 0.34, rx: 0.205, ryT: 0.18, ryB: 0.31 },
+      { t: 0.56, rx: 0.13, ryT: 0.13, ryB: 0.1 },
+      { t: 0.78, rx: 0.19, ryT: 0.18, ryB: 0.19 },
+      { t: 1.0, rx: 0.07, ryT: 0.07, ryB: 0.07 },
     ]
   );
   body.add(torso);
   // мышечные массивы плеча и бедра — рельеф корпуса
   for (const s of [-1, 1]) {
-    const sh = addMesh(body, new THREE.SphereGeometry(1, 12, 10), M.coat, s * 0.1, 1.06, -0.44);
-    sh.scale.set(0.07, 0.16, 0.13);
-    const th = addMesh(body, new THREE.SphereGeometry(1, 12, 10), M.coat, s * 0.1, 1.02, 0.5);
-    th.scale.set(0.075, 0.19, 0.16);
+    const sh = addMesh(body, new THREE.SphereGeometry(1, 12, 10), M.coat, s * 0.13, 1.05, -0.44);
+    sh.scale.set(0.095, 0.16, 0.14);
+    const th = addMesh(body, new THREE.SphereGeometry(1, 12, 10), M.coat, s * 0.14, 1.04, 0.5);
+    th.scale.set(0.11, 0.19, 0.17);
   }
+  const chestMark = addMesh(body, new THREE.SphereGeometry(1, 12, 10), M.coatLight, 0, 1.08, -0.62);
+  chestMark.scale.set(0.11, 0.18, 0.065);
 
   // ---------- ШЕЯ
   const neck = new THREE.Group();
@@ -217,13 +221,16 @@ function createTazy() {
       new THREE.Vector3(0, 0.62, -0.01),
     ],
     [
-      { t: 0.0, rx: 0.1, ryT: 0.14, ryB: 0.17 },
-      { t: 0.5, rx: 0.072, ryT: 0.1, ryB: 0.11 },
-      { t: 1.0, rx: 0.06, ryT: 0.08, ryB: 0.085 },
+      { t: 0.0, rx: 0.13, ryT: 0.15, ryB: 0.18 },
+      { t: 0.5, rx: 0.095, ryT: 0.11, ryB: 0.12 },
+      { t: 1.0, rx: 0.08, ryT: 0.09, ryB: 0.095 },
     ],
     { rings: 24, upStrength: 0.2, downStrength: 0.4 }
   );
   neck.add(neckLoft);
+  const collar = addMesh(neck, new THREE.TorusGeometry(0.135, 0.022, 8, 24), M.ornRed, 0, 0.08, 0);
+  collar.rotation.x = Math.PI / 2;
+  addMesh(collar, new THREE.SphereGeometry(0.035, 8, 6), M.gold, 0, -0.16, 0.015);
 
   // ---------- ГОЛОВА: клин от мочки носа к черепу
   const head = new THREE.Group();
@@ -232,58 +239,63 @@ function createTazy() {
   neck.add(head);
   const headLoft = makeLoft(
     [
-      new THREE.Vector3(0, -0.035, -0.43),
-      new THREE.Vector3(0, -0.02, -0.3),
-      new THREE.Vector3(0, 0.005, -0.16),
+      new THREE.Vector3(0, -0.035, -0.36),
+      new THREE.Vector3(0, -0.02, -0.25),
+      new THREE.Vector3(0, 0.005, -0.13),
       new THREE.Vector3(0, 0.025, -0.02),
       new THREE.Vector3(0, 0.02, 0.14),
     ],
     [
-      { t: 0.0, rx: 0.026, ryT: 0.024, ryB: 0.026 },
-      { t: 0.3, rx: 0.04, ryT: 0.038, ryB: 0.045 },
-      { t: 0.55, rx: 0.065, ryT: 0.06, ryB: 0.065 },
-      { t: 0.8, rx: 0.085, ryT: 0.085, ryB: 0.09 },
-      { t: 1.0, rx: 0.07, ryT: 0.07, ryB: 0.08 },
+      { t: 0.0, rx: 0.042, ryT: 0.035, ryB: 0.04 },
+      { t: 0.3, rx: 0.06, ryT: 0.052, ryB: 0.058 },
+      { t: 0.55, rx: 0.082, ryT: 0.072, ryB: 0.08 },
+      { t: 0.8, rx: 0.11, ryT: 0.1, ryB: 0.105 },
+      { t: 1.0, rx: 0.095, ryT: 0.09, ryB: 0.1 },
     ],
     { rings: 28, upStrength: 0.35, downStrength: 0.55 }
   );
   head.add(headLoft);
-  addMesh(head, new THREE.SphereGeometry(0.028, 10, 8), M.nose, 0, -0.033, -0.43);
+  addMesh(head, new THREE.SphereGeometry(0.045, 10, 8), M.nose, 0, -0.033, -0.37);
   for (const s of [-1, 1]) {
-    const eye = addMesh(head, new THREE.SphereGeometry(0.022, 10, 8), M.eye, s * 0.055, 0.032, -0.11, false);
+    const eye = addMesh(head, new THREE.SphereGeometry(0.026, 10, 8), M.eye, s * 0.075, 0.035, -0.08, false);
     eye.scale.set(0.8, 1, 1.2);
   }
   // Уши: висячие, с очёсами — фирменная черта тазы
   const ears = [];
   for (const s of [-1, 1]) {
     const ear = new THREE.Group();
-    ear.position.set(s * 0.085, 0.07, 0.05);
+    ear.position.set(s * 0.1, 0.07, 0.05);
     ear.rotation.z = s * 0.38;
     head.add(ear);
     const flap = addMesh(ear, new THREE.SphereGeometry(1, 12, 10), M.coatDark, 0, -0.13, 0);
-    flap.scale.set(0.034, 0.16, 0.085);
-    const fringe = addMesh(ear, new THREE.ConeGeometry(0.042, 0.1, 8), M.coatDark, 0, -0.3, 0);
+    flap.scale.set(0.055, 0.19, 0.1);
+    const fringe = addMesh(ear, new THREE.ConeGeometry(0.06, 0.16, 8), M.coatDark, 0, -0.34, 0);
     fringe.rotation.x = Math.PI;
     ears.push(ear);
   }
 
-  // ---------- ХВОСТ: тонкий, серпом
-  const tailSegs = [];
-  let tailParent = body;
-  let tp = new THREE.Vector3(0, 1.06, 0.78);
-  const tailCurve = [-0.9, -0.4, -0.3, -0.4, -0.4];
-  for (let i = 0; i < 5; i++) {
-    const seg = new THREE.Group();
-    seg.position.copy(tp);
-    seg.rotation.x = tailCurve[i];
-    tailParent.add(seg);
-    const r = 0.032 - i * 0.004;
-    addMesh(seg, new THREE.CylinderGeometry(r, r + 0.006, 0.2, 8), M.coat, 0, -0.1, 0);
-    tailSegs.push(seg);
-    tailParent = seg;
-    tp = new THREE.Vector3(0, -0.2, 0);
-  }
-  addMesh(tailSegs[4], new THREE.ConeGeometry(0.035, 0.14, 8), M.coatDark, 0, -0.24, 0);
+  // ---------- ХВОСТ: цельный серповидный очёс без заметных суставов
+  const tailRoot = new THREE.Group();
+  tailRoot.position.set(0, 1.06, 0.74);
+  body.add(tailRoot);
+  const tail = makeLoft(
+    [
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0.03, -0.08, 0.13),
+      new THREE.Vector3(0.08, -0.2, 0.27),
+      new THREE.Vector3(0.15, -0.3, 0.41),
+      new THREE.Vector3(0.22, -0.28, 0.54),
+      new THREE.Vector3(0.2, -0.13, 0.65),
+    ],
+    [
+      { t: 0, rx: 0.03, ryT: 0.026, ryB: 0.038 },
+      { t: 0.45, rx: 0.03, ryT: 0.024, ryB: 0.045 },
+      { t: 0.8, rx: 0.02, ryT: 0.017, ryB: 0.032 },
+      { t: 1, rx: 0.007, ryT: 0.007, ryB: 0.01 },
+    ],
+    { rings: 32, radialSegments: 10, colorUp: C.coatDark, colorMid: C.coatDark, colorDown: C.coat }
+  );
+  tailRoot.add(tail);
 
   // ---------- НОГИ
   function makeLeg(x, z, isFront) {
@@ -291,24 +303,25 @@ function createTazy() {
     hip.position.set(x, isFront ? 1.02 : 1.1, z);
     body.add(hip);
     const upperLen = isFront ? 0.42 : 0.48;
-    const upper = addMesh(hip, new THREE.CylinderGeometry(0.05, 0.038, upperLen, 10), M.coat, 0, -upperLen / 2, 0);
+    const upper = addMesh(hip, new THREE.CylinderGeometry(0.075, 0.052, upperLen, 10), M.coat, 0, -upperLen / 2, 0);
     if (!isFront) upper.scale.set(1.5, 1, 1.7);
     const knee = new THREE.Group();
     knee.position.set(0, -upperLen, 0);
     hip.add(knee);
     const lowerLen = isFront ? 0.5 : 0.55;
-    addMesh(knee, new THREE.CylinderGeometry(0.032, 0.026, lowerLen, 8), M.coat, 0, -lowerLen / 2, 0);
-    const paw = addMesh(knee, new THREE.SphereGeometry(0.045, 8, 6), M.coatDark, 0, -lowerLen, -0.02);
-    paw.scale.set(1, 0.7, 1.4);
+    addMesh(knee, new THREE.SphereGeometry(0.065, 8, 6), M.coat, 0, 0, 0);
+    addMesh(knee, new THREE.CylinderGeometry(0.046, 0.032, lowerLen, 8), M.coat, 0, -lowerLen / 2, 0);
+    const paw = addMesh(knee, new THREE.SphereGeometry(0.065, 8, 6), M.coat, 0, -lowerLen, -0.025);
+    paw.scale.set(1.05, 0.65, 1.55);
     return { hip, knee };
   }
-  const legFL = makeLeg(-0.14, -0.52, true);
-  const legFR = makeLeg(0.14, -0.52, true);
-  const legRL = makeLeg(-0.15, 0.52, false);
-  const legRR = makeLeg(0.15, 0.52, false);
+  const legFL = makeLeg(-0.18, -0.52, true);
+  const legFR = makeLeg(0.18, -0.52, true);
+  const legRL = makeLeg(-0.19, 0.52, false);
+  const legRR = makeLeg(0.19, 0.52, false);
 
   root.traverse(o => { if (o.isMesh) o.castShadow = true; });
-  root.scale.setScalar(1.12); // собака крупнее в кадре
+  root.scale.setScalar(1.22);
 
   // ---------- АНИМАЦИЯ ГАЛОПА
   const legs = [
@@ -318,25 +331,23 @@ function createTazy() {
     { l: legRR, ph: 0.62, front: false },
   ];
   function animate(t, speed, state) {
-    // частота шага = скорость мира / длину маха — лапы «цепляются» за землю
-    const STRIDE = 2.6;
-    const T = t * (Math.max(speed, 6) / STRIDE) * Math.PI * 2;
     const speedNorm = Math.min(1, Math.max(0, (speed - START_SPEED) / (MAX_SPEED - START_SPEED)));
-    root.rotation.x = -0.03 - speedNorm * 0.05;
+    const cadence = 2.55 + speedNorm * 1.35;
+    const T = t * cadence * Math.PI * 2;
+    root.rotation.x = -0.025 - speedNorm * 0.035;
     if (state === 'run') {
-      const amp = 0.85;
+      const amp = 0.92;
       for (const { l, ph, front } of legs) {
         const p = T + ph * Math.PI * 2;
-        l.hip.rotation.x = Math.sin(p) * amp * (front ? 1 : 0.9);
-        const fold = Math.max(0, Math.sin(p + (front ? 1.9 : 1.5)));
-        l.knee.rotation.x = front ? fold * 1.15 : -fold * 1.05;
+        const swing = Math.sin(p);
+        l.hip.rotation.x = (front ? -1 : 1) * swing * amp * (front ? 1 : 0.92);
+        const fold = Math.max(0, Math.sin(p + (front ? 1.25 : 1.05)));
+        l.knee.rotation.x = (front ? 1 : -1) * (0.08 + fold * 1.25);
       }
-      body.position.y = Math.abs(Math.sin(T)) * 0.075 - 0.02;
-      body.rotation.x = Math.sin(T) * 0.08;
-      for (let i = 0; i < tailSegs.length; i++) {
-        tailSegs[i].rotation.x = tailCurve[i] + Math.sin(T * 0.5 - i * 0.7) * 0.1;
-        tailSegs[i].rotation.z = Math.sin(T * 0.25 - i * 0.5) * 0.06;
-      }
+      body.position.y = Math.pow(Math.sin(T), 2) * 0.06 - 0.015;
+      body.rotation.x = Math.sin(T) * 0.035;
+      tailRoot.rotation.x = Math.sin(T * 0.45) * 0.035;
+      tailRoot.rotation.z = Math.sin(T * 0.32) * 0.07;
       for (let i = 0; i < ears.length; i++) {
         ears[i].rotation.x = -0.35 + Math.sin(T * 0.5 + i) * 0.12;
       }
@@ -347,7 +358,8 @@ function createTazy() {
       }
       body.rotation.x = -0.18;
       body.position.y = 0;
-      for (let i = 0; i < tailSegs.length; i++) tailSegs[i].rotation.x = tailCurve[i] * 0.6;
+      tailRoot.rotation.x = -0.08;
+      tailRoot.rotation.z = 0.05;
     } else if (state === 'slide') {
       for (const { l, front } of legs) {
         l.hip.rotation.x = front ? -1.25 : 1.2;
@@ -367,18 +379,18 @@ function makeSteppeTexture() {
   const cv = document.createElement('canvas');
   cv.width = 512; cv.height = 512;
   const g = cv.getContext('2d');
-  g.fillStyle = '#c2a95e'; g.fillRect(0, 0, 512, 512);
+  g.fillStyle = '#c99635'; g.fillRect(0, 0, 512, 512);
   for (let i = 0; i < 900; i++) {
     const x = Math.random() * 512, y = Math.random() * 512;
-    g.fillStyle = ['#b09a50', '#d0b76e', '#a8974f', '#c9af62'][i % 4];
+    g.fillStyle = ['#967126', '#e2b14b', '#7e6825', '#c18329'][i % 4];
     g.beginPath(); g.arc(x, y, 1 + Math.random() * 3.5, 0, 7); g.fill();
   }
   const grad = g.createLinearGradient(140, 0, 372, 0);
-  grad.addColorStop(0, 'rgba(165,140,86,0)');
-  grad.addColorStop(0.25, 'rgba(152,126,76,0.55)');
-  grad.addColorStop(0.5, 'rgba(160,133,80,0.7)');
-  grad.addColorStop(0.75, 'rgba(152,126,76,0.55)');
-  grad.addColorStop(1, 'rgba(165,140,86,0)');
+  grad.addColorStop(0, 'rgba(110,78,26,0)');
+  grad.addColorStop(0.25, 'rgba(105,72,22,0.5)');
+  grad.addColorStop(0.5, 'rgba(92,61,18,0.7)');
+  grad.addColorStop(0.75, 'rgba(105,72,22,0.5)');
+  grad.addColorStop(1, 'rgba(110,78,26,0)');
   g.fillStyle = grad; g.fillRect(140, 0, 232, 512);
   const tex = new THREE.CanvasTexture(cv);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -531,7 +543,7 @@ function makeBush() {
   addMesh(b, new THREE.CylinderGeometry(0.06, 0.1, 0.7, 6), M.wood, 0, 0.35, 0);
   for (let i = 0; i < 3; i++) {
     addMesh(b, new THREE.SphereGeometry(0.35 + Math.random() * 0.2, 8, 6),
-      mat(0x87833f, { flatShading: true }), (Math.random() - 0.5) * 0.5, 0.85 + Math.random() * 0.3, (Math.random() - 0.5) * 0.5);
+      mat(i === 0 ? 0x477f2c : 0x659b35, { flatShading: true }), (Math.random() - 0.5) * 0.5, 0.85 + Math.random() * 0.3, (Math.random() - 0.5) * 0.5);
   }
   b.traverse(o => { if (o.isMesh) o.castShadow = true; });
   return b;
@@ -584,7 +596,7 @@ function makeCliff() {
 function makePoplar() {
   const g = new THREE.Group();
   addMesh(g, new THREE.CylinderGeometry(0.09, 0.13, 1.1, 7), M.wood, 0, 0.55, 0);
-  addMesh(g, new THREE.ConeGeometry(0.75, 3.6, 8), mat(0x5e7a38, { flatShading: true }), 0, 2.6, 0);
+  addMesh(g, new THREE.ConeGeometry(0.75, 3.6, 8), mat(0x28652f, { flatShading: true }), 0, 2.6, 0);
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
   return g;
 }
@@ -633,7 +645,7 @@ const game = {
   t: 0,
   lane: 1,
   laneX: 0, laneFrom: 0, laneT: 1, // твин смены полосы
-  y: 0, vy: 0,
+  y: 0, vy: 0, jumpHeld: false, jumpPeak: 0, lastJumpPeak: 0,
   state: 'run',
   slideTimer: 0,
   queued: null,     // буфер ввода в воздухе
@@ -648,6 +660,7 @@ const game = {
 const obstacles = []; // {group, kind, lane}
 const decors = [];
 const coins = [];
+const patternDirector = { safeLane: 1, lastId: '', lastWasAction: false, history: [] };
 
 function spawnDecor() {
   const side = Math.random() < 0.5 ? -1 : 1;
@@ -674,7 +687,7 @@ function spawnTrackside() {
   const obj = new THREE.Group();
   if (Math.random() < 0.6) {
     const tuft = addMesh(obj, new THREE.SphereGeometry(0.14 + Math.random() * 0.12, 7, 5),
-      mat(0x99944e, { flatShading: true }), 0, 0.08, 0);
+      mat(0x5f8f32, { flatShading: true }), 0, 0.08, 0);
     tuft.scale.y = 0.6;
   } else {
     addMesh(obj, new THREE.DodecahedronGeometry(0.16 + Math.random() * 0.14, 0), M.stone, 0, 0.1, 0);
@@ -714,73 +727,99 @@ function coinArc(lane, zOff) { // дуга над прыжковым препя�
   for (let i = -2; i <= 2; i++) addCoin(lane, 1.05 + Math.cos(i * 0.55) * 1.0, zOff + i * 1.1);
 }
 
-const rndLane = () => (Math.random() * 3) | 0;
 const otherLanes = (l) => [0, 1, 2].filter(x => x !== l);
+const adjacentLane = (lane) => {
+  if (lane === 0) return 1;
+  if (lane === 2) return 1;
+  return Math.random() < 0.5 ? 0 : 2;
+};
+function addGate(freeLane, zOff = 0, kind = KIND_BLOCK) {
+  for (const lane of otherLanes(freeLane)) addObstacle(lane, kind, zOff);
+}
+function addActionRow(kind, zOff = 0) {
+  for (let lane = 0; lane < 3; lane++) addObstacle(lane, kind, zOff);
+}
 
-// Каждый паттерн возвращает свою «глубину» в метрах (насколько он длинный)
+// Паттерны хранят непрерывный безопасный маршрут. Ранние волны обучают
+// одному действию, поздние соединяют два заранее читаемых решения.
 const PATTERNS = [
-  { minTier: 0, w: 3, gen() { // одиночный прыжок + дуга асыков
-    const l = rndLane();
-    addObstacle(l, KIND_FENCE);
-    if (Math.random() < 0.7) coinArc(l, 0);
-    return 4;
+  { id: 'coin-run', minTier: 0, w: 2, gen(safe) {
+    coinLine(safe, 2, 7);
+    return { depth: 12, safeLane: safe };
   }},
-  { minTier: 0, w: 3, gen() { // одиночный подкат + линия асыков под тканью
-    const l = rndLane();
-    addObstacle(l, KIND_ARCH);
-    if (Math.random() < 0.7) coinLine(l, 3, 4, 0.6);
-    return 4;
+  { id: 'lane-change', minTier: 0, w: 5, gen(safe) {
+    const target = adjacentLane(safe);
+    addObstacle(safe, KIND_BLOCK);
+    coinLine(target, 2, 6);
+    return { depth: 11, safeLane: target };
   }},
-  { minTier: 0, w: 2, gen() { // чистая дорожка асыков с переходом полосы
-    const a = rndLane();
-    const b = otherLanes(a)[(Math.random() * 2) | 0];
-    coinLine(a, 0, 4);
-    coinLine(b, -4 * 1.7 - 2.5, 4);
-    return 16;
+  { id: 'jump-teach', minTier: 0, w: 4, gen(safe) {
+    addObstacle(safe, KIND_FENCE);
+    coinArc(safe, 0);
+    return { depth: 8, safeLane: safe };
   }},
-  { minTier: 0.08, w: 4, gen() { // ворота: две полосы заняты, свободная — с наградой
-    const free = rndLane();
-    const [a, b] = otherLanes(free);
-    const kinds = [KIND_BLOCK, Math.random() < 0.5 ? KIND_FENCE : KIND_ARCH];
-    addObstacle(a, kinds[0]);
-    addObstacle(b, kinds[1]);
-    coinLine(free, 1.5, 4);
-    return 8;
+  { id: 'slide-teach', minTier: 0.08, w: 4, gen(safe) {
+    addObstacle(safe, KIND_ARCH);
+    coinLine(safe, 3, 5, 0.58);
+    return { depth: 9, safeLane: safe };
   }},
-  { minTier: 0.25, w: 3, gen() { // шикана: блок, через паузу блок на другой полосе
-    const a = rndLane();
-    const b = otherLanes(a)[(Math.random() * 2) | 0];
-    addObstacle(a, KIND_BLOCK);
-    addObstacle(b, KIND_BLOCK, -13);
-    const safe1 = otherLanes(a)[0] === b ? otherLanes(a)[1] : otherLanes(a)[0];
-    coinLine(safe1, -4, 3);
-    return 18;
+  { id: 'open-gate', minTier: 0.12, w: 5, gen(safe) {
+    const free = Math.random() < 0.45 ? safe : adjacentLane(safe);
+    addGate(free);
+    coinLine(free, 2, 5);
+    return { depth: 10, safeLane: free };
   }},
-  { minTier: 0.4, w: 2, gen() { // цепочка прыжков на одной полосе
-    const l = rndLane();
-    addObstacle(l, KIND_FENCE);
-    addObstacle(l, KIND_FENCE, -8);
-    coinArc(l, 0);
-    coinArc(l, -8);
-    return 13;
+  { id: 'zigzag-gates', minTier: 0.28, w: 3, gen(safe) {
+    const first = adjacentLane(safe);
+    const second = adjacentLane(first);
+    addGate(first, 0);
+    addGate(second, -15);
+    coinLine(first, 3, 4);
+    coinLine(second, -11, 5);
+    return { depth: 22, safeLane: second, route: [first, second] };
   }},
-  { minTier: 0.55, w: 3, gen() { // тройные ворота: прыжок / блок / подкат
-    const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
-    addObstacle(lanes[0], KIND_FENCE);
-    addObstacle(lanes[1], KIND_BLOCK);
-    addObstacle(lanes[2], KIND_ARCH);
-    return 6;
+  { id: 'jump-row', minTier: 0.38, w: 2.5, action: true, gen(safe) {
+    addActionRow(KIND_FENCE);
+    coinArc(safe, 0);
+    return { depth: 9, safeLane: safe };
+  }},
+  { id: 'slide-row', minTier: 0.48, w: 2.5, action: true, gen(safe) {
+    addActionRow(KIND_ARCH);
+    coinLine(safe, 3, 5, 0.58);
+    return { depth: 10, safeLane: safe };
+  }},
+  { id: 'switch-then-jump', minTier: 0.58, w: 3, gen(safe) {
+    const target = adjacentLane(safe);
+    addGate(target, 0);
+    addObstacle(target, KIND_FENCE, -14);
+    coinLine(target, 3, 4);
+    coinArc(target, -14);
+    return { depth: 21, safeLane: target };
   }},
 ];
 
 function spawnPattern() {
-  const tier = Math.min(1, game.t / 100); // сложность растёт первые ~100 секунд
-  const pool = PATTERNS.filter(p => tier >= p.minTier);
+  const tier = Math.min(1, game.t / 95);
+  let pool = PATTERNS.filter(p => tier >= p.minTier && p.id !== patternDirector.lastId && !(p.action && patternDirector.lastWasAction));
+  if (!pool.length) pool = PATTERNS.filter(p => tier >= p.minTier);
   let sum = 0; for (const p of pool) sum += p.w;
   let r = Math.random() * sum;
   let chosen = pool[0];
   for (const p of pool) { r -= p.w; if (r <= 0) { chosen = p; break; } }
-  return chosen.gen();
+  const fromLane = patternDirector.safeLane;
+  const result = chosen.gen(fromLane, tier);
+  patternDirector.safeLane = result.safeLane;
+  patternDirector.lastId = chosen.id;
+  patternDirector.lastWasAction = Boolean(chosen.action);
+  patternDirector.history.push({
+    id: chosen.id,
+    fromLane,
+    safeLane: result.safeLane,
+    route: result.route || [result.safeLane],
+    action: Boolean(chosen.action),
+  });
+  if (patternDirector.history.length > 24) patternDirector.history.shift();
+  return result.depth;
 }
 
 // ============================================================ ЗВУК
@@ -865,15 +904,24 @@ function moveLane(dir) {
 }
 function doJump() {
   if (!game.running) return;
-  if (game.state === 'jump') { game.queued = 'jump'; return; }
+  if (game.state === 'jump') {
+    if (game.vy < 0 && game.y < 0.42) game.queued = 'jump';
+    return;
+  }
   game.state = 'jump';
   game.vy = JUMP_VY;
+  game.jumpHeld = true;
+  game.jumpPeak = 0;
   sfxJump();
   spawnDust(game.laneX, 0, true);
 }
+function releaseJump() {
+  game.jumpHeld = false;
+  if (game.state === 'jump' && game.vy > JUMP_CUT_VY) game.vy = JUMP_CUT_VY;
+}
 function doSlide() {
   if (!game.running) return;
-  if (game.state === 'jump') { game.vy = FASTFALL_VY; game.queued = 'slide'; return; }
+  if (game.state === 'jump') { game.jumpHeld = false; game.vy = FASTFALL_VY; game.queued = 'slide'; return; }
   game.state = 'slide';
   game.slideTimer = SLIDE_TIME;
   sfxSlide();
@@ -881,22 +929,39 @@ function doSlide() {
 }
 window.addEventListener('keydown', (e) => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(e.key)) e.preventDefault();
+  if (e.repeat) return;
   if (e.key === 'ArrowLeft' || e.key === 'a') moveLane(-1);
   else if (e.key === 'ArrowRight' || e.key === 'd') moveLane(1);
   else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') doJump();
   else if (e.key === 'ArrowDown' || e.key === 's') doSlide();
 });
+window.addEventListener('keyup', (e) => {
+  if (e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') releaseJump();
+});
 let touchStart = null;
-window.addEventListener('touchstart', (e) => { touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }, { passive: true });
-window.addEventListener('touchend', (e) => {
-  if (!touchStart) return;
-  const dx = e.changedTouches[0].clientX - touchStart.x;
-  const dy = e.changedTouches[0].clientY - touchStart.y;
+let suppressTapClick = false;
+canvas.addEventListener('pointerdown', (event) => {
+  event.preventDefault();
+  suppressTapClick = false;
+  touchStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
+  if (event.isTrusted) canvas.setPointerCapture?.(event.pointerId);
+});
+canvas.addEventListener('pointerup', (event) => {
+  if (!touchStart || event.pointerId !== touchStart.id) return;
+  event.preventDefault();
+  const dx = event.clientX - touchStart.x;
+  const dy = event.clientY - touchStart.y;
   touchStart = null;
   if (Math.abs(dx) < 24 && Math.abs(dy) < 24) { doJump(); return; }
+  suppressTapClick = true;
   if (Math.abs(dx) > Math.abs(dy)) moveLane(dx > 0 ? 1 : -1);
   else if (dy < 0) doJump(); else doSlide();
-}, { passive: true });
+});
+canvas.addEventListener('pointercancel', () => { touchStart = null; });
+canvas.addEventListener('click', () => {
+  if (suppressTapClick) { suppressTapClick = false; return; }
+  doJump();
+});
 
 // ============================================================ UI
 const $ = id => document.getElementById(id);
@@ -925,12 +990,14 @@ function startGame() {
   obstacles.length = decors.length = coins.length = 0;
   Object.assign(game, {
     running: true, speed: 0, t: 0, lane: 1, laneX: 0, laneFrom: 0, laneT: 1,
-    y: 0, vy: 0, state: 'run', slideTimer: 0, queued: null, landSquash: 0,
+    y: 0, vy: 0, jumpHeld: false, jumpPeak: 0, lastJumpPeak: 0, state: 'run', slideTimer: 0, queued: null, landSquash: 0,
     score: 0, asyks: 0,
     distSinceObstacle: -14, distSinceDecor: 0,
     distSinceWallL: 0, distSinceWallR: 0, distSinceTrackside: 0,
     deathShake: 0,
   });
+  Object.assign(patternDirector, { safeLane: 1, lastId: '', lastWasAction: false });
+  patternDirector.history.length = 0;
   for (let i = 0; i < 10; i++) { spawnDecor(); decors[decors.length - 1].position.z = -10 - i * 10; }
   for (let z = -6; z > SPAWN_Z; z -= 4.5) {
     spawnWall(-1, z - Math.random() * 2);
@@ -1018,7 +1085,9 @@ function loop(now) {
     if (game.state === 'jump') {
       game.vy += GRAVITY * dt;
       game.y += game.vy * dt;
+      game.jumpPeak = Math.max(game.jumpPeak, game.y);
       if (game.y <= 0) {
+        game.lastJumpPeak = game.jumpPeak;
         game.y = 0; game.vy = 0; game.state = 'run';
         game.landSquash = 0.12;
         spawnDust(game.laneX, 0, true);
@@ -1059,7 +1128,9 @@ function loop(now) {
     game.distSinceTrackside += dz;
     game.distSinceWallL += dz;
     game.distSinceWallR += dz;
-    const gap = Math.max(15, game.speed * 1.15); // ~1.15 сек между волнами
+    const tier = Math.min(1, game.t / 95);
+    const reactionTime = 1.65 - tier * 0.5;
+    const gap = Math.max(20, game.speed * reactionTime) * (0.94 + Math.random() * 0.12);
     if (game.speed > 6 && game.distSinceObstacle > gap) {
       game.distSinceObstacle = -spawnPattern();
     }
@@ -1103,10 +1174,11 @@ function loop(now) {
     }
 
     // --- камера: плавный переезд в игровую позицию, FOV-разгон
-    camera.position.x += (game.laneX * 0.45 - camera.position.x) * dt * 4;
+    camera.position.x += (game.laneX * 0.45 + CAM.xOffset - camera.position.x) * dt * 4;
     camera.position.y += (CAM.y + Math.sin(game.t * 2.2) * 0.03 - camera.position.y) * dt * 3;
     camera.position.z += (CAM.z - camera.position.z) * dt * 3;
-    const targetFov = 58 + ((game.speed - START_SPEED) / (MAX_SPEED - START_SPEED)) * 10;
+    const speedZoom = Math.min(1, Math.max(0, (game.speed - START_SPEED) / (MAX_SPEED - START_SPEED)));
+    const targetFov = 56 + speedZoom * 8;
     camera.fov += (targetFov - camera.fov) * dt * 2;
     camera.updateProjectionMatrix();
     camera.lookAt(game.laneX * 0.6, CAM.lookY, CAM.lookZ);
@@ -1142,4 +1214,27 @@ function loop(now) {
   renderer.render(scene, camera);
 }
 requestAnimationFrame(loop);
+window.__tazyGame = {
+  get snapshot() {
+    return {
+      running: game.running,
+      state: game.state,
+      y: game.y,
+      vy: game.vy,
+      speed: game.speed,
+      lane: game.lane,
+      lastJumpPeak: game.lastJumpPeak,
+      patterns: patternDirector.history.map(pattern => ({ ...pattern })),
+    };
+  },
+  samplePatterns(count = 16, tier = 1) {
+    const previousTime = game.t;
+    game.t = Math.max(0, Math.min(1, tier)) * 95;
+    Object.assign(patternDirector, { safeLane: 1, lastId: '', lastWasAction: false });
+    patternDirector.history.length = 0;
+    for (let i = 0; i < count; i++) spawnPattern();
+    game.t = previousTime;
+    return patternDirector.history.map(pattern => ({ ...pattern }));
+  },
+};
 if (DEBUG_DOG) window.__dbg = { scene, game, tazy, camera };
